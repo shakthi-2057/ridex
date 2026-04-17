@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RideX Final</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:sans-serif;}
+
+body{transition:0.3s;}
+
+/* DARK */
+body.dark{background:#020617;color:white;}
+body.dark .sidebar{background:#0f172a;}
+body.dark .card{background:#1e293b;}
+body.dark input{background:#0f172a;color:white;}
+body.dark button{background:#22c55e;color:black;}
+
+/* PASTEL */
+body.pastel{background:#e2e8f0;color:#1e293b;}
+body.pastel .sidebar{background:#c7d2fe;}
+body.pastel .card{background:#f1f5f9;}
+body.pastel input{background:#e2e8f0;color:#1e293b;}
+body.pastel button{background:#818cf8;color:#1e1b4b;}
+
+.main{display:flex;}
+
+.sidebar{
+  width:220px;
+  height:100vh;
+  padding:20px;
+  display:none;
+  flex-direction:column;
+  gap:15px;
+}
+
+.sidebar button{
+  padding:10px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.sidebar button.active{
+  outline:2px solid white;
+}
+
+.content{flex:1;padding:20px;}
+
+.hero{text-align:center;margin-top:100px;}
+
+.card{
+  padding:25px;
+  border-radius:12px;
+  margin-bottom:20px;
+}
+
+button{
+  width:100%;
+  margin-top:12px;
+  padding:12px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.sidebar h2{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+input{
+  width:100%;
+  padding:10px;
+  margin-top:8px;
+  border:none;
+  border-radius:8px;
+}
+
+.layout{
+  display:flex;
+  gap:30px; /* increased space */
+}
+
+.left{
+  width:45%;
+}
+
+.right{
+  width:55%;
+}
+
+.layout{
+  display:flex;
+  gap:40px;
+  padding:20px 40px;
+}
+
+#drop{
+  display:block;
+}
+
+#suggestions{
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  z-index: 999;
+  max-height: 200px;
+  overflow-y: auto;
+  background:#1e293b;
+  border-radius:8px;
+}
+
+
+#suggestions div{
+  padding:10px;
+  cursor:pointer;
+}
+
+#suggestions div:hover{
+  background:#334155;
+}
+
+#login{
+  width:100%;
+  padding:40px;
+}
+
+#login input,
+#login select,
+#login button{
+  width:100%;
+  margin-top:20px;
+}
+
+#map{height:400px;border-radius:10px;}
+
+.hidden{display:none;}
+</style>
+</head>
+
+<body class="dark">
+
+<div class="main">
+
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+  <h2>
+    🚀 RideX 
+    <span onclick="toggleTheme()" style="cursor:pointer;">🌙</span>
+  </h2>
+
+<button id="btnUser" onclick="goUser()">User</button>
+<button id="btnDriver" onclick="goDriver()">Driver</button>
+
+<button id="btnAll" onclick="setCategory('all',this)">All Drivers</button>
+<button id="btnWomen" onclick="setCategory('women',this)">Women 👩</button>
+<button id="btnSenior" onclick="setCategory('elder',this)">Senior 👴</button>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<div id="home" class="hero">
+  <h1>Book Bike Taxi Instantly</h1>
+  <button onclick="showLogin()">Get Started</button>
+</div>
+
+<div id="login" class="hidden card">
+  <input id="email" placeholder="Enter Email">
+  <input id="password" type="password" placeholder="Enter Password">
+  <select id="role">
+    <option value="user">User</option>
+    <option value="driver">Driver</option>
+  </select>
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="userPage" class="hidden layout">
+
+<div class="left">
+  <div class="card">
+    <input id="pickup" disabled>
+
+    <div style="position:relative; width:100%;">
+      <input id="drop" placeholder="Enter Drop Location"
+         oninput="searchPlaces(this.value)">
+      <div id="suggestions"></div>
+    </div>
+
+    <button onclick="fare()">Calculate Fare</button>
+    <p id="fareText"></p>
+
+    <button onclick="book()">Book Ride</button>
+    <button onclick="cancelRide()">Cancel Ride</button>
+  </div>
+
+  <div class="card">
+    <h3>Ride History</h3>
+    <div id="history"></div>
+  </div>
+</div>
+
+<div class="right">
+  <div class="card">
+    <div id="map"></div>
+  </div>
+</div>
+
+</div>
+
+<div id="driverPage" class="hidden card">
+  <button onclick="toggle()">Toggle Availability</button>
+  <p id="status">Offline ❌</p>
+</div>
+
+</div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+let currentLat, currentLon, map, routeLine;
+let selectedLat, selectedLon;
+let category="all";
+let isOnline = false;
+
+
+
+function showLogin(){
+  document.getElementById("home").classList.add("hidden");
+  document.getElementById("login").classList.remove("hidden");
+}
+
+function login(){
+
+  let role = document.getElementById("role").value;
+  let email = document.getElementById("email").value;
+  let password = document.getElementById("password").value;
+
+  if(email=="" || password==""){
+    alert("Enter email & password");
+    return;
+  }
+
+  alert("Login Success 🎉");
+
+  document.getElementById("login").classList.add("hidden");
+  document.getElementById("sidebar").style.display="flex";
+
+  // 🔥 RESET ALL
+  document.getElementById("btnUser").style.display = "none";
+  document.getElementById("btnDriver").style.display = "none";
+  document.getElementById("btnAll").style.display = "none";
+  document.getElementById("btnWomen").style.display = "none";
+  document.getElementById("btnSenior").style.display = "none";
+
+  if(role === "user"){
+
+    // ✅ user view
+    document.getElementById("btnUser").style.display = "block";
+    document.getElementById("btnAll").style.display = "block";
+    document.getElementById("btnWomen").style.display = "block";
+    document.getElementById("btnSenior").style.display = "block";
+
+    goUser();
+    setTimeout(initMap,500);
+
+  }else{
+
+    // ✅ driver view
+    document.getElementById("btnDriver").style.display = "block";
+
+    goDriver();
+  }
+}
+
+function toggleTheme(){
+  let body=document.body;
+  let icon=document.querySelector("h2 span");
+
+  if(body.classList.contains("dark")){
+    body.classList.replace("dark","pastel");
+    icon.innerText="☀️";
+  }else{
+    body.classList.replace("pastel","dark");
+    icon.innerText="🌙";
+  }
+}
+
+function initMap(){
+  navigator.geolocation.getCurrentPosition(pos=>{
+
+    currentLat = pos.coords.latitude;
+    currentLon = pos.coords.longitude;
+
+    document.getElementById("pickup").value = "📍 Current Location";
+
+    map = L.map('map').setView([currentLat, currentLon], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+      .addTo(map);
+
+    L.marker([currentLat, currentLon])
+      .addTo(map)
+      .bindPopup("📍 You are here")
+      .openPopup();
+    setTimeout(()=>{
+    map.invalidateSize();
+    },300);
+  });
+}
+
+window.onload = () => {
+
+  let savedStatus = localStorage.getItem("driverStatus");
+
+  if(savedStatus === "true"){
+    isOnline = true;
+
+    let s = document.getElementById("status");
+    if(s){
+      s.innerText = "Online ✅";
+      s.style.color = "lime";
+    }
+  }
+
+};
+
+async function drawRoute(){
+
+  if(routeLine){
+    map.removeLayer(routeLine);
+  }
+
+  let url = `https://router.project-osrm.org/route/v1/driving/${currentLon},${currentLat};${selectedLon},${selectedLat}?overview=full&geometries=geojson`;
+
+  let res = await fetch(url);
+  let data = await res.json();
+
+  let coords = data.routes[0].geometry.coordinates;
+
+  // convert [lon,lat] → [lat,lon]
+  let latlngs = coords.map(c => [c[1], c[0]]);
+
+  routeLine = L.polyline(latlngs, {
+    color: 'lime',
+    weight: 5
+  }).addTo(map);
+
+  map.fitBounds(routeLine.getBounds());
+}
+
+async function searchPlaces(query){
+
+  let box = document.getElementById("suggestions");
+
+  if(query.length < 3){
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML = "<div>Loading...</div>";
+
+  try{
+
+    // 🔥 TRY 1: Direct API
+    let res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${query}`
+    );
+
+    let data;
+
+    if(res.ok){
+      data = await res.json();
+    }else{
+      throw "Direct API failed";
+    }
+
+    renderSuggestions(data, box);
+
+  }catch(err){
+
+    console.log("Direct failed → trying proxy");
+
+    try{
+      // 🔥 TRY 2: AllOrigins fallback
+      let url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${query}`;
+
+      let res2 = await fetch(
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+      );
+
+      let data2 = await res2.json();
+
+      renderSuggestions(data2, box);
+
+    }catch(err2){
+      console.log("Both failed", err2);
+      box.innerHTML = "<div style='color:red'>Network error</div>";
+    }
+  }
+}
+
+function renderSuggestions(data, box){
+
+  box.innerHTML = "";
+
+  if(!data || data.length === 0){
+    box.innerHTML = "<div>No results</div>";
+    return;
+  }
+
+  let seen = new Set();
+
+  data.forEach(place => {
+
+    if(seen.has(place.display_name)) return;
+    seen.add(place.display_name);
+
+    let div = document.createElement("div");
+
+    div.innerText = place.display_name.split(",").slice(0,3).join(",");
+
+    div.onclick = () => {
+      document.getElementById("drop").value = place.display_name;
+      box.innerHTML = "";
+
+      selectedLat = parseFloat(place.lat);
+      selectedLon = parseFloat(place.lon);
+    };
+
+    box.appendChild(div);
+  });
+}
+
+// 🚴 fare calculation + route draw
+async function fare(){
+
+  if(!selectedLat || !selectedLon){
+    alert("Select location from suggestions");
+    return;
+  }
+
+  let dropLat = selectedLat;
+  let dropLon = selectedLon;
+
+  let R = 6371;
+
+  let dLat = (dropLat - currentLat) * Math.PI / 180;
+  let dLon = (dropLon - currentLon) * Math.PI / 180;
+
+  let a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(currentLat*Math.PI/180) *
+    Math.cos(dropLat*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+
+  let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  let distance = R * c;
+
+  let fareAmount = Math.round(distance * 12);
+
+  document.getElementById("fareText").innerText =
+    `Distance: ${distance.toFixed(2)} km | Fare: ₹${fareAmount}`;
+
+  drawRoute();
+
+}
+
+function book(){
+
+  if(!isOnline){
+    alert("No drivers available ❌");
+    return;
+  }
+
+  alert(`Ride Booked 🚴\nCategory: ${category}`);
+}
+
+function cancelRide(){
+  alert("Ride Cancelled ❌");
+}
+
+function toggle(){
+  let s = document.getElementById("status");
+
+  isOnline = !isOnline;
+
+  // save to localStorage 🔥
+  localStorage.setItem("driverStatus", isOnline);
+
+  s.innerText = isOnline ? "Online ✅" : "Offline ❌";
+
+  if(isOnline){
+    s.style.color = "lime";
+  }else{
+    s.style.color = "red";
+  }
+}
+
+
+function goUser(){
+  document.getElementById("userPage").classList.remove("hidden");
+  document.getElementById("driverPage").classList.add("hidden");
+
+  setTimeout(()=>{
+    if(map) map.invalidateSize();   // 🔥 FIX
+  },300);
+}
+
+function goDriver(){
+  document.getElementById("driverPage").classList.remove("hidden");
+  document.getElementById("userPage").classList.add("hidden");
+}
+
+function setCategory(type,btn){
+  category=type;
+
+  document.querySelectorAll(".sidebar button")
+    .forEach(b=>b.classList.remove("active"));
+
+  btn.classList.add("active");
+}
+
+</script>
+
+</body>
+</html>
