@@ -7,6 +7,10 @@ app.use(express.json());
 
 let rides = [];
 
+app.get("/",(req,res)=>{
+  res.send("server is running");
+});
+
 // LOGIN
 app.post("/login",(req,res)=>{
   res.json({msg:"OTP Verified ✅"});
